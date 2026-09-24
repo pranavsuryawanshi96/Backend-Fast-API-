@@ -1,4 +1,4 @@
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter,Depends,HTTPException,status
 from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.schemas.api_response import ApiResponse
@@ -10,7 +10,7 @@ expense_router=APIRouter(
 )
 
 # create expense
-@expense_router.post("/",response_model=ApiResponse)
+@expense_router.post("/",response_model=ApiResponse,status_code=status.HTTP_201_CREATED)
 def create_expense(expense_request_dto:ExpenseRequestDto,db:Session=Depends(get_db)):
     # create a new expense import from models
     new_expense=Expense(
@@ -24,20 +24,123 @@ def create_expense(expense_request_dto:ExpenseRequestDto,db:Session=Depends(get_
     print("new expense is created")
     return ApiResponse(status="success",message="Expense is created successfully",data={"expense":ExpenseResponseDTO.model_validate(new_expense)})
 
-
-
 # get all expenses
-
-
-
+@expense_router.get("/", response_model=ApiResponse)
+def get_all_expenses(db: Session = Depends(get_db)):
+    expenses = db.query(Expense).all()
+    return ApiResponse(
+        status="success",
+        message="Expenses retrieved successfully",
+        data={ 
+            "expenses": [
+                ExpenseResponseDTO.model_validate(expense)
+                for expense in expenses
+            ]
+        }
+    )
 
 # get expense by id
+@expense_router.get("/{expense_id}", response_model=ApiResponse)
+def get_expense_by_id(
+    expense_id: int,
+    db: Session = Depends(get_db)
+):
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id
+    ).first()
 
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+
+    return ApiResponse(
+        status="success",
+        message="Expense retrieved successfully",
+        data={
+            "expense": ExpenseResponseDTO.model_validate(expense)
+        }
+    )
 
 # update expense by id
+@expense_router.put("/{expense_id}", response_model=ApiResponse)
+def update_expense(
+    expense_id: int,
+    expense_request_dto: ExpenseRequestDto,
+    db: Session = Depends(get_db)
+):
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id
+    ).first()
+
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+
+    expense.title = expense_request_dto.title
+    expense.description = expense_request_dto.description
+    expense.amount = expense_request_dto.amount
+    expense.show = expense_request_dto.show
+
+    db.commit()
+    db.refresh(expense)
+
+    return ApiResponse(
+        status="success",
+        message="Expense updated successfully",
+        data={
+            "expense": ExpenseResponseDTO.model_validate(expense)
+        }
+    )
 
 
 # delete expense by id
+@expense_router.delete("/{expense_id}", response_model=ApiResponse)
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db)
+):
+    expense = db.query(Expense).filter(
+        Expense.id == expense_id
+    ).first()
+
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expense not found"
+        )
+
+    db.delete(expense)
+    db.commit()
+
+    return ApiResponse(
+        status="success",
+        message="Expense deleted successfully"
+    )
+
 
 # search expense by title
+@expense_router.get("/search/", response_model=ApiResponse)
+def search_expenses(
+    title: str,
+    db: Session = Depends(get_db)
+):
+    expenses = db.query(Expense).filter(
+        Expense.title.ilike(f"%{title}%")
+    ).all()
+
+    return ApiResponse(
+        status="success",
+        message="Expenses retrieved successfully",
+        data={
+            "expenses": [
+                ExpenseResponseDTO.model_validate(expense)
+                for expense in expenses
+            ]
+        }
+    )
+
 
